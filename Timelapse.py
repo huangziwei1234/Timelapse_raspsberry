@@ -11,8 +11,8 @@ import csv
 import re  # 正则表达式模块
 
 # 设置网络路径和经纬度（北京）
-network_path = "/home/ziwei/raspberry_pi_timelapse"
-temp_dng_path = "/home/ziwei/timelapse"
+network_path = "nas location"
+temp_dng_path = "recommend Raspberry location"
 csv_path = os.path.join(network_path, "exposure_log.csv")
 latitude = 39.9042
 longitude = 116.4074
