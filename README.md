@@ -30,3 +30,21 @@ Due to RAM limit in raspberry, such frequency libcamera calls will lead insuffic
 ## Installation
 - Upload .py into Raspberry via SSH or Command (pscp `C:\your folder name\timelapse.py RaspberryUserName@192.168.x.xxx:/home/timelapse/timelapse.py`)
 - Create following file into `/etc/systemd/system` (Raspberry): `timelapse.service` (trigger .py), `timelapse.timer` (trigger timelapse.service), `reboot-schedule.service` (trigger reboot), `reboot-schedule.timer` (setup reboot time and trigger reboot-schedule.service), due to permission restriction, these 4 files cannot be direct copied into folder. Have to use sudo nano /etc/systemd/system/`reboot-schedule.service` to create and edit. Just copy and paste those 4 files code into correspondence files.
+- Remember to reload systemd and restart timer and service by following commands:
+sudo systemctl daemon-reload #reload systemd
+
+sudo systemctl enable timelapse.service
+
+sudo systemctl start timelapse.service
+
+sudo systemctl enable timelapse.timer
+
+sudo systemctl start timelapse.timer
+
+sudo systemctl enable reboot-schedule.service
+
+sudo systemctl start reboot-schedule.service
+
+sudo systemctl enable reboot-schedule.timer
+
+sudo systemctl start reboot-schedule.timer
