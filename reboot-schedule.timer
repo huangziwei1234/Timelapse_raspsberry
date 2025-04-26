@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer for scheduled reboot
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+OnCalendar=*-*-* 10:00:00
+OnCalendar=*-*-* 14:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

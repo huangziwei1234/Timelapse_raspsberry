@@ -1,0 +1,17 @@
+[Unit]
+Description=Timelapse Photography Script
+After=network.target
+
+[Service]
+Type=simple
+User=ziwei
+Group=ziwei
+WorkingDirectory=/home/timelapse
+ExecStartPre=/bin/chmod +x /home/timelapse/timelapse.py
+ExecStart=/bin/bash -c 'source /home/myenv/bin/activate && python /home/timelapse/timelapse.py >> /home/timelapse/log.txt 2>&1'
+Restart=on-failure
+RestartSec=30
+
+
+[Install]
+WantedBy=multi-user.target
