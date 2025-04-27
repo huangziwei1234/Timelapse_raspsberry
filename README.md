@@ -27,6 +27,28 @@ Due to RAM limit in raspberry, such frequency libcamera calls will lead insuffic
 - Log.txt will record so much useless information, don't know how to remove yet.
 - RAM used up too rapid, don't know how to solve yet, rapid reboot as temp solution.
 
+## Workflow
+```mermaid
+flowchart TD;
+    A[程序启动] --> B[打印Timelapse run start];
+    B --> C[获取当前时间 now];
+    C --> D[计算北京时间 → UTC时间];
+    D --> E[用UTC时间获取日出日落时间];
+    E --> F[转换日出日落为北京时间];
+    F --> G[生成今天的目标拍摄时间点（44个）];
+    G --> H[遍历每个 target_time];
+    H --> I{当前时间 now 是否在 target_time ±2分钟？};
+    I -- 是 --> J{这个 time_tag 是否已经拍过？};
+    J -- 否 --> K[记录日志接近拍摄时间];
+    K --> L[执行 capture_imagetime_tag];
+    L --> M[记录日志 拍摄完成];
+    J -- 是 --> N[记录日志 已拍摄，跳过];
+    M --> O[结束];
+    N --> O;
+    I -- 否 --> O;
+```
+
+
 ## Installation
 - Upload .py into Raspberry via SSH or Command (pscp `C:\your folder name\timelapse.py RaspberryUserName@192.168.x.xxx:/home/timelapse/timelapse.py`)
 - Create following file into `/etc/systemd/system` (Raspberry): `timelapse.service` (trigger .py), `timelapse.timer` (trigger timelapse.service), `reboot-schedule.service` (trigger reboot), `reboot-schedule.timer` (setup reboot time and trigger reboot-schedule.service), due to permission restriction, these 4 files cannot be direct copied into folder. Have to use sudo nano /etc/systemd/system/`reboot-schedule.service` to create and edit. Just copy and paste those 4 files code into correspondence files.
