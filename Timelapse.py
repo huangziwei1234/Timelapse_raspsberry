@@ -19,12 +19,26 @@ longitude = 116.4074
 sun = Sun(latitude, longitude)
 beijing_tz = pytz.timezone('Asia/Shanghai')
 
-#     """重启程序的函数"""
-def restart_program():
+#     """重启设备的函数"""
+def reboot_device():
     log("程序出现错误，准备重启...", level="CRITICAL")
-    time.sleep(5)  # 等待 5 秒钟再重启
-    python = sys.executable
-    os.execv(python, ['python'] + sys.argv)  # 使用当前的命令行参数重新启动脚本
+    time.sleep(5)  # 等待 5 秒钟再执行
+    subprocess.run(['sudo', 'reboot'], check=True)
+
+#     对错误进行检索
+def check_capture_error(result):
+    """
+    检查 libcamera 拍摄命令的输出，如果检测到缓冲区分配失败或 dmaHeap 分配失败，立即重启设备。
+    """
+    if result:
+        # 检查是否包含缓冲区分配失败的错误
+        if "failed to allocate capture buffers for stream" in result.stderr:
+            log("检测到缓冲区分配失败错误，准备重启设备...", level="CRITICAL")
+            reboot_device()
+        # 检查是否包含 dmaHeap 分配失败的错误
+        elif "dmaHeap allocation failure for rpicam-apps0" in result.stderr:
+            log("检测到 dmaHeap 分配失败错误，准备重启设备...", level="CRITICAL")
+            reboot_device()
 
 # 优化版日志输出函数
 def log(msg, level="INFO"):
@@ -33,7 +47,7 @@ def log(msg, level="INFO"):
 
 # 检查文件是否已存在
 def already_taken(time_tag):
-    raw_path = os.path.join(network_path, f"{time_tag}.raw")
+    raw_path = os.path.join(network_path, f"{time_tag}.dng")
     return os.path.exists(raw_path)
 
 
@@ -74,18 +88,24 @@ def capture_image(time_tag):
             "--nopreview",
             "-v"  # verbose 模式，会打印实际参数
         ], capture_output=True, text=True, check=True)
+        # 记录标准输出和标准错误
+        log(f"STDOUT: {result.stdout}")
+        log(f"STDERR: {result.stderr}", level="ERROR")  # 如果有标准错误，记录为错误日志
+
+        # 在执行后检查错误
+        check_capture_error(result)
     except subprocess.CalledProcessError as e:
         log(f"libcamera-still 执行失败: {e}", level="ERROR")
-        restart_program()  # 出现错误时重启程序
+        reboot_device()  # 出现错误时重启程序
     except Exception as e:
         log(f"预览拍照过程失败: {e}", level="ERROR")
-        restart_program()  # 出现错误时重启程序
+        reboot_device()  # 出现错误时重启程序
 
     try:
         preview_avg, _ = analyze_brightness(jpg_temp_path)
     except Exception as e:
         log(f"亮度分析失败: {e}", level="ERROR")
-        restart_program()  # 出现错误时重启程序
+        reboot_device()  # 出现错误时重启程序
 
     # 从stderr中抓取曝光时间
     exposure_time = None
@@ -140,7 +160,7 @@ def capture_image(time_tag):
 
         for candidate in candidates:
             try:
-                subprocess.run([
+                result = subprocess.run([
                     "libcamera-still",
                     #"--raw", #这个在试拍时候应该没用20250426
                     "--shutter", str(candidate),
@@ -148,7 +168,13 @@ def capture_image(time_tag):
                     "--awb", "indoor",
                     "--output", jpg_temp_path,
                     "--nopreview"
-                ], check=True)
+                ], capture_output=True, text=True, check=True)
+                # 记录标准输出和标准错误
+                log(f"STDOUT: {result.stdout}")
+                log(f"STDERR: {result.stderr}", level="ERROR")  # 如果有标准错误，记录为错误日志
+
+                # 在执行后检查错误
+                check_capture_error(result)
                 avg, highlight_ratio = analyze_brightness(jpg_temp_path)
                 score = highlight_ratio * 1000 + abs(avg - 110)  # 重点考虑高光，其次考虑亮度接近程度，如果需要改写110，则在这里改
                 if score < best_score:
@@ -159,10 +185,10 @@ def capture_image(time_tag):
                     final_params["shutter"] = str(candidate)
             except subprocess.CalledProcessError as e:
                 log(f"试拍失败: {e}", level="ERROR")
-                restart_program()  # 出现错误时重启程序
+                reboot_device()  # 出现错误时重启程序
             except Exception as e:
                 log(f"试拍分析失败: {e}", level="ERROR")
-                restart_program()  # 出现错误时重启程序
+                reboot_device()  # 出现错误时重启程序
 
     # 实际使用推荐参数再次拍照（统一固定 ISO100、4500K）
     cmd = [
@@ -179,14 +205,14 @@ def capture_image(time_tag):
         cmd.extend(["--brightness", final_params["brightness"]])
 
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
         subprocess.run(["cp", jpg_temp_path, jpg_final_path], check=True)
         log(f"照片保存成功：{jpg_final_path}")
         subprocess.run(["cp", dng_temp_path, dng_final_path], check=True)
         log(f"DNG文件保存成功：{dng_final_path}")
     except subprocess.CalledProcessError as e:
         log(f"最终拍摄或拷贝失败: {e}", level="ERROR")
-        restart_program()  # 出现错误时重启程序
+        reboot_device()  # 出现错误时重启程序
 
     # 清理临时文件
     if os.path.exists(jpg_temp_path):
@@ -244,7 +270,7 @@ def record_exposure_data(time_tag, preview_avg, final_params, preview_shutter="a
             round(score, 2) if score is not None else "",
             file_type  # 记录文件类型
         ])
-    log(f"曝光数据记录完成：{time_tag}, 文件类型：{file_type}")
+    log(f"曝光数据记录完成：{time_tag}, 文件类型：{file_type}, 曝光={final_params['shutter']}us, 增益={final_params['gain']}, 亮度={final_params['brightness']}")
 
 
 # 主函数（仅在接近拍摄时间点时触发分析与拍摄）
@@ -295,7 +321,7 @@ def main():
 
         # 检查是否接近某个拍摄点
         for target_time in targets:
-            if abs((now - target_time).total_seconds()) <= 120:
+            if abs((now - target_time).total_seconds()) <= 90:
                 time_tag = target_time.strftime("%Y%m%d_%H%M")
                 if not already_taken(time_tag):
                     log(f"当前时间接近拍摄时间点：{time_tag}")
@@ -313,5 +339,4 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         log(f"程序出现严重错误，准备重启: {e}", level="CRITICAL")
-        restart_program()  # 出现错误时重启程序
-
+        reboot_device()  # 出现错误时重启程序
